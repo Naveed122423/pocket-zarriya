@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Spin Wheel</title>
+    <style>
+        :root { --brand-green: #10B981; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #F0F4F7; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .container { text-align: center; position: relative; }
+        .wheel-container { position: relative; width: 320px; height: 320px; }
+        #wheelCanvas { transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1); }
+        #pointer { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-top: 40px solid #333; }
+        #spinButton { margin-top: 20px; padding: 15px 40px; font-size: 20px; font-weight: bold; color: white; background-color: var(--brand-green); border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #spinButton:disabled { background-color: #9E9E9E; cursor: not-allowed; }
+        #spinsLeftText { margin-top: 15px; font-size: 18px; color: #333; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="wheel-container">
+        <div id="pointer"></div>
+        <canvas id="wheelCanvas" width="320" height="320"></canvas>
+    </div>
+    <p id="spinsLeftText">Spins left: 13</p>
+    <button id="spinButton">SPIN</button>
+</div>
+
+<script>
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinButton = document.getElementById('spinButton');
+        const spinsLeftText = document.getElementById('spinsLeftText');
+
+        const segments = [
+            { color: "#FFFFFF", label: "130" }, { color: "#10B981", label: "15" },
+            { color: "#FFFFFF", label: "150" }, { color: "#10B981", label: "30" },
+            { color: "#FFFFFF", label: "200" }, { color: "#10B981", label: "50" },
+            { color: "#FFFFFF", label: "250" }, { color: "#10B981", label: "70" },
+            { color: "#FFFFFF", label: "100" }, { color: "#10B981", label: "10" }
+        ];
+
+        const numSegments = segments.length;
+        const anglePerSegment = 2 * Math.PI / numSegments;
+        const radius = canvas.width / 2;
+
+        let spinsLeft = 13;
+        let isSpinning = false;
+        let prizeToAward = 0;
+        let currentRotation = 0;
+
+        const pzLogo = new Image();
+        pzLogo.src = 'https://i.postimg.cc/bwtLT0Rp/PZ-Coin-1.png'; // Replace with your public URL
+        pzLogo.onload = () => {
+            drawWheel();
+        };
+
+        function drawWheel() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            segments.forEach((segment, i) => {
+                const startAngle = i * anglePerSegment;
+                const endAngle = startAngle + anglePerSegment;
+                const textAngle = startAngle + anglePerSegment / 2;
+
+                ctx.beginPath();
+                ctx.moveTo(radius, radius);
+                ctx.arc(radius, radius, radius - 10, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = segment.color;
+                ctx.fill();
+                ctx.strokeStyle = '#E0E0E0';
+                ctx.stroke();
+
+                ctx.save();
+                ctx.fillStyle = '#333';
+                ctx.translate(radius + Math.cos(textAngle) * (radius * 0.65), radius + Math.sin(textAngle) * (radius * 0.65));
+                ctx.rotate(textAngle + Math.PI / 2);
+
+                // --- THE FIX: Precise Positioning ---
+                // Draw the PZ Logo slightly above the center of the text area
+                ctx.drawImage(pzLogo, -12, -25, 24, 24);
+
+                // Draw the prize text slightly below the center of the text area
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(segment.label, 0, 15);
+                // --- END FIX ---
+
+                ctx.restore();
+            });
+        }
+
+        spinButton.addEventListener('click', () => {
+            if (isSpinning || spinsLeft <= 0) return;
+            isSpinning = true;
+            spinButton.disabled = true;
+            spinsLeft--;
+            spinsLeftText.textContent = `Spins left: ${spinsLeft}`;
+
+            const houseEdgeRoll = Math.floor(Math.random() * 10);
+            const prizeValues = segments.map(s => parseInt(s.label));
+            if (houseEdgeRoll === 0) {
+                const lowPrizes = prizeValues.filter(p => p <= 30);
+                prizeToAward = lowPrizes[Math.floor(Math.random() * lowPrizes.length)];
+            } else {
+                prizeToAward = prizeValues[Math.floor(Math.random() * prizeValues.length)];
+            }
+
+            const winningSegmentIndex = segments.findIndex(s => s.label == prizeToAward);
+            const segmentCenterAngle = (winningSegmentIndex * anglePerSegment) + (anglePerSegment / 2);
+            const stopAngleDegrees = segmentCenterAngle * (180 / Math.PI);
+            const finalStopAngle = 360 - stopAngleDegrees + 90;
+            const fullRotations = 5 * 360;
+            const finalRotation = fullRotations + finalStopAngle;
+
+            canvas.style.transition = 'none';
+            canvas.style.transform = `rotate(${currentRotation % 360}deg)`;
+            canvas.offsetHeight;
+            canvas.style.transition = 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)';
+            canvas.style.transform = `rotate(${finalRotation}deg)`;
+            currentRotation = finalRotation;
+        });
+
+        canvas.addEventListener('transitionend', () => {
+            isSpinning = false;
+            if (window.AndroidBridge) {
+                window.AndroidBridge.showPrizeDialog(prizeToAward);
+            }
+        });
+
+        function resetSpinButton() {
+            spinButton.disabled = false;
+        }
+    </script>
+</body>
+</html>
