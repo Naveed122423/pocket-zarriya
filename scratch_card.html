@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Scratch Card</title>
+    <style>
+        :root { --brand-green: #10B981; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #F0F4F7; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .container { text-align: center; }
+        .card-container {
+            position: relative;
+            width: 300px;
+            height: 180px;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        #prizeLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #prizeText {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        #prizeSubText {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--brand-green);
+        }
+        #scratchCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            border-radius: 12px;
+        }
+        #cardsLeftText {
+            margin-top: 24px;
+            font-size: 18px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card-container">
+        <div id="prizeLayer">
+            <p id="prizeText">You Won</p>
+            <p id="prizeSubText">100 PZ's</p>
+        </div>
+        <canvas id="scratchCanvas" width="300" height="180"></canvas>
+    </div>
+    <p id="cardsLeftText">Cards left: 13</p>
+</div>
+
+<script>
+        const canvas = document.getElementById('scratchCanvas');
+        const ctx = canvas.getContext('2d');
+        const cardsLeftText = document.getElementById('cardsLeftText');
+        const prizeSubText = document.getElementById('prizeSubText');
+
+        let cardsLeft = 13;
+        let prizeToAward = 0;
+        let isDrawing = false;
+        let scratchedPixels = 0;
+        let totalPixels = canvas.width * canvas.height;
+
+        // --- Prize Logic with House Edge ---
+        function determinePrize() {
+            const prizes = [10, 25, 50, 100, 500]; // Possible prize values
+            const weights = [60, 25, 10, 4, 1]; // 60% chance for 10, 25% for 25, etc.
+
+            const weightedList = [];
+            prizes.forEach((prize, i) => {
+                for (let j = 0; j < weights[i]; j++) {
+                    weightedList.push(prize);
+                }
+            });
+
+            return weightedList[Math.floor(Math.random() * weightedList.length)];
+        }
+
+        function setupCard() {
+            prizeToAward = determinePrize();
+            prizeSubText.textContent = `${prizeToAward} PZ's`;
+
+            // Draw the scratchable silver foil
+            ctx.fillStyle = '#C0C0C0'; // Silver color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'destination-out';
+        }
+
+        function scratch(x, y) {
+            if (!isDrawing) return;
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2, true);
+            ctx.fill();
+            checkScratchProgress();
+        }
+
+        function checkScratchProgress() {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let transparentPixels = 0;
+            for (let i = 3; i < imageData.data.length; i += 4) {
+                if (imageData.data[i] === 0) {
+                    transparentPixels++;
+                }
+            }
+            const scratchPercentage = (transparentPixels / totalPixels) * 100;
+            if (scratchPercentage > 70) {
+                // Card is sufficiently scratched, reveal prize and call Android
+                canvas.style.pointerEvents = 'none'; // Disable further scratching
+                if (window.AndroidBridge) {
+                    window.AndroidBridge.onScratchComplete(prizeToAward);
+                }
+            }
+        }
+
+        // Event Listeners for scratching
+        canvas.addEventListener('mousedown', (e) => isDrawing = true);
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mousemove', (e) => scratch(e.offsetX, e.offsetY));
+        canvas.addEventListener('touchstart', (e) => isDrawing = true);
+        canvas.addEventListener('touchend', () => isDrawing = false);
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            scratch(touch.clientX - rect.left, touch.clientY - rect.top);
+        });
+
+        // Get initial state from Android
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.AndroidBridge) {
+                cardsLeft = window.AndroidBridge.getInitialCards();
+                cardsLeftText.textContent = `Cards left: ${cardsLeft}`;
+                if (cardsLeft <= 0) {
+                    prizeText.textContent = "No Cards Left";
+                    prizeSubText.textContent = "Come back tomorrow!";
+                    canvas.style.display = 'none';
+                }
+            }
+        });
+
+        setupCard();
+    </script>
+</body>
+</html>
