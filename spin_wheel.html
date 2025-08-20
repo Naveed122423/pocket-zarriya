@@ -9,41 +9,57 @@
         body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #F0F4F7; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         .container { text-align: center; position: relative; }
         .wheel-container { position: relative; width: 320px; height: 320px; }
-        #wheelCanvas { transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1); }
-        #pointer { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-top: 40px solid #333; }
+        #wheelCanvas {
+            width: 100%;
+            height: 100%;
+            transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        #pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-top: 40px solid #333;
+            z-index: 10; /* THE FIX: Ensures pointer is always on top */
+        }
         #spinButton { margin-top: 20px; padding: 15px 40px; font-size: 20px; font-weight: bold; color: white; background-color: var(--brand-green); border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         #spinButton:disabled { background-color: #9E9E9E; cursor: not-allowed; }
         #spinsLeftText { margin-top: 15px; font-size: 18px; color: #333; }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="wheel-container">
-        <div id="pointer"></div>
-        <canvas id="wheelCanvas" width="320" height="320"></canvas>
+    <div class="container">
+        <div class="wheel-container">
+            <div id="pointer"></div>
+            <!-- THE FIX: Higher resolution canvas for sharp graphics -->
+            <canvas id="wheelCanvas" width="640" height="640"></canvas>
+        </div>
+        <p id="spinsLeftText">Spins left: 13</p>
+        <button id="spinButton">SPIN</button>
     </div>
-    <p id="spinsLeftText">Spins left: 13</p>
-    <button id="spinButton">SPIN</button>
-</div>
 
-<script>
+    <script>
         const canvas = document.getElementById('wheelCanvas');
         const ctx = canvas.getContext('2d');
         const spinButton = document.getElementById('spinButton');
         const spinsLeftText = document.getElementById('spinsLeftText');
 
+        // THE FIX: Prize map re-ordered to match your graphic, starting from the top and going clockwise.
         const segments = [
-            { color: "#FFFFFF", label: "130" }, { color: "#10B981", label: "15" },
-            { color: "#FFFFFF", label: "150" }, { color: "#10B981", label: "30" },
-            { color: "#FFFFFF", label: "200" }, { color: "#10B981", label: "50" },
-            { color: "#FFFFFF", label: "250" }, { color: "#10B981", label: "70" },
-            { color: "#FFFFFF", label: "100" }, { color: "#10B981", label: "10" }
+            { color: "#10B981", label: "10" }, { color: "#FFFFFF", label: "100" },
+            { color: "#10B981", label: "70" }, { color: "#FFFFFF", label: "250" },
+            { color: "#10B981", label: "50" }, { color: "#FFFFFF", label: "200" },
+            { color: "#10B981", label: "30" }, { color: "#FFFFFF", label: "150" },
+            { color: "#10B981", label: "15" }, { color: "#FFFFFF", label: "130" }
         ];
 
         const numSegments = segments.length;
         const anglePerSegment = 2 * Math.PI / numSegments;
         const radius = canvas.width / 2;
-
         let spinsLeft = 13;
         let isSpinning = false;
         let prizeToAward = 0;
@@ -52,40 +68,38 @@
         const pzLogo = new Image();
         pzLogo.src = 'https://i.postimg.cc/bwtLT0Rp/PZ-Coin-1.png'; // Replace with your public URL
         pzLogo.onload = () => {
-            drawWheel();
+            drawWheel(); // Redraw the wheel with the logo once it's loaded
         };
 
         function drawWheel() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             segments.forEach((segment, i) => {
-                const startAngle = i * anglePerSegment;
+                const startAngle = i * anglePerSegment - (Math.PI / numSegments) - (Math.PI / 2);
                 const endAngle = startAngle + anglePerSegment;
                 const textAngle = startAngle + anglePerSegment / 2;
 
                 ctx.beginPath();
                 ctx.moveTo(radius, radius);
-                ctx.arc(radius, radius, radius - 10, startAngle, endAngle);
+                ctx.arc(radius, radius, radius - 20, startAngle, endAngle);
                 ctx.closePath();
                 ctx.fillStyle = segment.color;
                 ctx.fill();
                 ctx.strokeStyle = '#E0E0E0';
+                ctx.lineWidth = 2;
                 ctx.stroke();
 
                 ctx.save();
                 ctx.fillStyle = '#333';
                 ctx.translate(radius + Math.cos(textAngle) * (radius * 0.65), radius + Math.sin(textAngle) * (radius * 0.65));
                 ctx.rotate(textAngle + Math.PI / 2);
-
-                // --- THE FIX: Precise Positioning ---
-                // Draw the PZ Logo slightly above the center of the text area
-                ctx.drawImage(pzLogo, -12, -25, 24, 24);
-
-                // Draw the prize text slightly below the center of the text area
-                ctx.font = 'bold 18px Arial';
+                
+                if (pzLogo.complete) {
+                    ctx.drawImage(pzLogo, -24, -50, 48, 48);
+                }
+                
+                ctx.font = 'bold 36px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(segment.label, 0, 15);
-                // --- END FIX ---
-
+                ctx.fillText(segment.label, 0, 25);
                 ctx.restore();
             });
         }
@@ -98,24 +112,25 @@
             spinsLeftText.textContent = `Spins left: ${spinsLeft}`;
 
             const houseEdgeRoll = Math.floor(Math.random() * 10);
-            const prizeValues = segments.map(s => parseInt(s.label));
+            let winningSegmentIndex;
             if (houseEdgeRoll === 0) {
-                const lowPrizes = prizeValues.filter(p => p <= 30);
-                prizeToAward = lowPrizes[Math.floor(Math.random() * lowPrizes.length)];
+                const lowPrizeIndices = [1, 3, 8]; // Indices for 15, 30, 10
+                winningSegmentIndex = lowPrizeIndices[Math.floor(Math.random() * lowPrizeIndices.length)];
             } else {
-                prizeToAward = prizeValues[Math.floor(Math.random() * prizeValues.length)];
+                winningSegmentIndex = Math.floor(Math.random() * numSegments);
             }
 
-            const winningSegmentIndex = segments.findIndex(s => s.label == prizeToAward);
-            const segmentCenterAngle = (winningSegmentIndex * anglePerSegment) + (anglePerSegment / 2);
+            prizeToAward = parseInt(segments[winningSegmentIndex].label);
+            
+            const segmentCenterAngle = (winningSegmentIndex * anglePerSegment);
             const stopAngleDegrees = segmentCenterAngle * (180 / Math.PI);
-            const finalStopAngle = 360 - stopAngleDegrees + 90;
+            
             const fullRotations = 5 * 360;
-            const finalRotation = fullRotations + finalStopAngle;
-
+            const finalRotation = fullRotations - stopAngleDegrees;
+            
             canvas.style.transition = 'none';
             canvas.style.transform = `rotate(${currentRotation % 360}deg)`;
-            canvas.offsetHeight;
+            canvas.offsetHeight; 
             canvas.style.transition = 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)';
             canvas.style.transform = `rotate(${finalRotation}deg)`;
             currentRotation = finalRotation;
@@ -131,6 +146,9 @@
         function resetSpinButton() {
             spinButton.disabled = false;
         }
+        
+        // THE FIX: Draw the wheel immediately without the logo
+        drawWheel();
     </script>
 </body>
 </html>
